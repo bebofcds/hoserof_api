@@ -455,7 +455,6 @@ func GetAllReleasedResultsForStudent(studentID string) ([]models.ResultSummary, 
 	for _, examDoc := range examsSnap {
 		examID := examDoc.Ref.ID
 
-		// Load exam info
 		var exam models.Exam
 		if err := examDoc.DataTo(&exam); err != nil {
 			continue
@@ -480,7 +479,6 @@ func GetAllReleasedResultsForStudent(studentID string) ([]models.ResultSummary, 
 			continue
 		}
 
-		// Calculate stats
 		totalPoints := 0.0
 		correct := 0
 		wrong := 0

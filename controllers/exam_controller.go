@@ -1,12 +1,13 @@
 package controllers
 
 import (
-	"HOSEROF_API/models"
-	"HOSEROF_API/services"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
+
+	"HOSEROF_API/models"
+	"HOSEROF_API/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -82,6 +83,11 @@ func GetExamForStudent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get exam"})
 		return
 	}
+
+	if qs == nil {
+		qs = []models.Question{}
+	}
+
 	c.JSON(http.StatusOK, qs)
 }
 
@@ -123,6 +129,9 @@ func GetSubmissionsForExam(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get submissions"})
 		return
+	}
+	if subs == nil {
+		subs = []models.Submission{}
 	}
 	c.JSON(http.StatusOK, subs)
 }
@@ -181,10 +190,8 @@ func ListReleasedResults(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load results"})
 		return
 	}
-
 	if results == nil {
 		results = []models.ResultSummary{}
 	}
-
 	c.JSON(http.StatusOK, results)
 }

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"log"
-
 	"HOSEROF_API/config"
 	"HOSEROF_API/routes"
+	"fmt"
+	"log"
+	"os"
 
 	"github.com/joho/godotenv"
 )
@@ -19,9 +19,14 @@ func main() {
 	config.InitSupabase()
 	defer config.DB.Close()
 
-	fmt.Println("Server running on :3000")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	fmt.Println("Server running on :", port)
 	router := routes.SetupRouter()
-	if err := router.Run(":3000"); err != nil {
+	if err := router.Run(); err != nil {
 		log.Fatal("server failed:", err)
 	}
 }
