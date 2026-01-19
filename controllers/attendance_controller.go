@@ -39,6 +39,43 @@ func MarkAttendance(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 
 }
+
+func MarkAttendanceManual(c *gin.Context) {
+
+	var body struct {
+		StudentID string `json:"studentId"`
+		Date      string `json:"date"`
+		Attended  bool   `json:"attended"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+
+	if body.StudentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "student id required"})
+		return
+	}
+
+	if body.Date == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "date required (YYYY-MM-DD)"})
+		return
+	}
+
+	err := services.MarkAttendanceManual(body.StudentID, body.Date, body.Attended)
+	if err != nil {
+		if err.Error() == "no user found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no user found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func GetAttendance(c *gin.Context) {
 	token := c.MustGet("user").(*jwt.Token)
 	claims := token.Claims.(jwt.MapClaims)

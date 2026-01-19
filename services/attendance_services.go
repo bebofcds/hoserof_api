@@ -44,6 +44,38 @@ func MarkAttendance(studentID string, attended bool) error {
 	return err
 }
 
+func MarkAttendanceManual(studentID string, datetime string, attended bool) error {
+	ctx := context.Background()
+
+	studentDoc := config.DB.Collection("students").Doc(studentID)
+
+	snap, err := studentDoc.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return errors.New("no user found")
+		}
+		return err
+	}
+
+	if !snap.Exists() {
+		return errors.New("no user found")
+	}
+
+	parsedTime, err := time.Parse("2006-01-02;15:04:05", datetime)
+	if err != nil {
+		return errors.New("invalid datetime format: expected 2006-01-02;15:04:05")
+	}
+	dateStr := parsedTime.Format("2006-01-02")
+	attendanceDoc := studentDoc.Collection("attendance").Doc(dateStr)
+
+	_, err = attendanceDoc.Set(ctx, map[string]interface{}{
+		"attended":  attended,
+		"timestamp": parsedTime,
+	})
+
+	return err
+}
+
 func GetAttendance(studentID string) (models.AttendanceResponse, error) {
 	ctx := context.Background()
 
