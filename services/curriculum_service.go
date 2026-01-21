@@ -162,7 +162,7 @@ func getFileType(ext string) string {
 	switch ext {
 	case ".pdf":
 		return "pdf"
-	case ".mp3", ".wav", ".ogg", ".m4a", ".mpeg":
+	case ".mp3", ".wav", ".ogg", ".m4a" , ".mpeg":
 		return "audio"
 	case ".mp4", ".avi", ".mov", ".wmv":
 		return "video"
