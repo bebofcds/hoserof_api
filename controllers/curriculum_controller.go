@@ -11,9 +11,8 @@ import (
 )
 
 type UploadCurriculumBody struct {
-	ClassID     string `form:"class_id" binding:"required"`
-	Title       string `form:"title" binding:"required"`
-	Description string `form:"description"`
+	ClassID string `form:"class_id" binding:"required"`
+	Title   string `form:"title" binding:"required"`
 }
 
 func UploadCurriculum(c *gin.Context) {
@@ -94,8 +93,8 @@ func GetAllCurriculums(c *gin.Context) {
 }
 
 type UpdateCurriculumBody struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
+	Title   string `json:"title"`
+	ClassID string `json:"class_id"`
 }
 
 func UpdateCurriculum(c *gin.Context) {
@@ -112,8 +111,8 @@ func UpdateCurriculum(c *gin.Context) {
 	}
 
 	updates := map[string]interface{}{
-		"title":       body.Title,
-		"description": body.Description,
+		"title":    body.Title,
+		"class_id": body.ClassID,
 	}
 
 	if err := services.UpdateCurriculum(c.Request.Context(), id, updates); err != nil {

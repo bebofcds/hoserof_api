@@ -120,3 +120,33 @@ func GetAttendance(studentID string) (models.AttendanceResponse, error) {
 	}, nil
 
 }
+
+func GetStudentsByClass(classID string) ([]models.UserFirestore, error) {
+	ctx := context.Background()
+
+	iter := config.DB.Collection("students").
+		Where("classId", "==", classID).
+		Documents(ctx)
+
+	var students []models.UserFirestore
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var s models.UserFirestore
+		if err := doc.DataTo(&s); err != nil {
+			return nil, err
+		}
+		s.StudentID = doc.Ref.ID
+
+		students = append(students, s)
+	}
+
+	return students, nil
+}
