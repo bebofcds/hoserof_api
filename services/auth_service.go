@@ -30,7 +30,10 @@ func CreateStudent(newUser models.NewUser) error {
 }
 
 func CreateStaff(newStaff models.NewStaff) error {
-	hashed, nil := HashPassword(newStaff.Password)
+	hashed, err := HashPassword(newStaff.Password)
+	if err != nil {
+		return err
+	}
 	data := map[string]interface{}{
 		"id":          newStaff.ID,
 		"name":        newStaff.Name,
@@ -40,7 +43,7 @@ func CreateStaff(newStaff models.NewStaff) error {
 		"role":        newStaff.Role,
 	}
 
-	_, err := config.DB.Collection("staff").
+	_, err = config.DB.Collection("staff").
 		Doc(newStaff.ID).
 		Set(context.Background(), data)
 

@@ -56,7 +56,18 @@ func Login(c *gin.Context) {
 	resp, err := services.LoginUser(body)
 
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		if err.Error() == "PASSWORD_REQUIRED" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    "PASSWORD_REQUIRED",
+				"message": "Password is required",
+			})
+			return
+		}
+
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    "INVALID_LOGIN",
+			"message": "Invalid ID or password",
+		})
 		return
 	}
 	c.JSON(http.StatusOK, resp)
