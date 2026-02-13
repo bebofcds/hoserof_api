@@ -82,14 +82,12 @@ func GetExamsForClass(class string, studentID string) ([]models.Exam, error) {
 	return out, nil
 }
 
-func GetAllExams() ([]models.Exam, error) {
+func GetAllExamsForAdmin() ([]models.Exam, error) {
 	ctx := context.Background()
 
-	q := config.DB.Collection("exams")
-	iter := q.Documents(ctx)
-	var out []models.Exam
-	now := time.Now()
+	iter := config.DB.Collection("exams").Documents(ctx)
 
+	var out []models.Exam
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -102,13 +100,6 @@ func GetAllExams() ([]models.Exam, error) {
 		var e models.Exam
 		if err := doc.DataTo(&e); err != nil {
 			return nil, err
-		}
-
-		if now.Before(e.StartTime) {
-			continue
-		}
-		if now.After(e.EndTime) {
-			continue
 		}
 
 		out = append(out, e)
@@ -196,7 +187,6 @@ func SubmitExam(examID string, studentID string, answers map[string]models.Answe
 	}
 
 	var autoScore float64 = 0
-	var manualScore float64 = 0
 	for qid, ans := range answers {
 		q, ok := correctMap[qid]
 		if !ok {
@@ -223,17 +213,12 @@ func SubmitExam(examID string, studentID string, answers map[string]models.Answe
 		}
 	}
 
-	final := autoScore + manualScore
-
 	submission := models.Submission{
 		StudentID:   studentID,
 		StartedAt:   now,
 		SubmittedAt: now,
 		Answers:     answers,
-		AutoScore:   autoScore,
-		ManualScore: manualScore,
-		FinalScore:  final,
-		Graded:      false,
+		FinalScore:  autoScore,
 		Released:    false,
 	}
 
@@ -289,61 +274,79 @@ func GetAllSubmissions(examID string) ([]models.Submission, error) {
 	return out, nil
 }
 
-func GradeWrittenAnswer(examID, studentID, qid string, score float64) error {
-	ctx := context.Background()
-	subRef := config.DB.Collection("exams").Doc(examID).Collection("submissions").Doc(studentID)
-
-	snap, err := subRef.Get(ctx)
-	if err != nil {
-		return err
-	}
-	var s models.Submission
-	if err := snap.DataTo(&s); err != nil {
-		return err
-	}
-
-	ans, ok := s.Answers[qid]
-	if !ok {
-		return errors.New("question not found in submission")
-	}
-
-	ans.ManualScore = score
-	s.Answers[qid] = ans
-
-	var manualSum float64
-	for _, a := range s.Answers {
-		manualSum += a.ManualScore
-	}
-	s.ManualScore = manualSum
-	s.FinalScore = s.AutoScore + s.ManualScore
-	s.Graded = true
-
-	_, err = subRef.Set(ctx, s, firestore.MergeAll)
-	return err
-}
-
 func ReleaseResults(examID string) error {
 	ctx := context.Background()
 	examRef := config.DB.Collection("exams").Doc(examID)
-	_, err := examRef.Update(ctx, []firestore.Update{
+
+	snap, err := examRef.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	var exam models.Exam
+	if err := snap.DataTo(&exam); err != nil {
+		return err
+	}
+
+	if time.Now().Before(exam.EndTime) {
+		return errors.New("cannot release before exam ends")
+	}
+
+	_, err = examRef.Update(ctx, []firestore.Update{
 		{Path: "released", Value: true},
 	})
 	if err != nil {
 		return err
 	}
 
-	subs := examRef.Collection("submissions").Documents(ctx)
+	iter := examRef.Collection("submissions").Documents(ctx)
 	for {
-		d, err := subs.Next()
+		d, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
 		if err != nil {
 			break
 		}
-		_, _ = d.Ref.Update(ctx, []firestore.Update{
+		d.Ref.Update(ctx, []firestore.Update{
 			{Path: "released", Value: true},
 		})
 	}
 
 	return nil
+}
+
+func DeleteExam(examID string) error {
+	ctx := context.Background()
+
+	examRef := config.DB.Collection("exams").Doc(examID)
+
+	qIter := examRef.Collection("questions").Documents(ctx)
+	for {
+		doc, err := qIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			break
+		}
+		doc.Ref.Delete(ctx)
+	}
+
+	sIter := examRef.Collection("submissions").Documents(ctx)
+	for {
+		doc, err := sIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			break
+		}
+		doc.Ref.Delete(ctx)
+	}
+
+	_, err := examRef.Delete(ctx)
+	return err
 }
 func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 	ctx := context.Background()
@@ -396,7 +399,6 @@ func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 		totalPoints += q.Points
 	}
 
-	reviews := make([]models.QuestionReview, 0, len(questions))
 	correctCount := 0
 	wrongCount := 0
 
@@ -432,26 +434,9 @@ func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 			wrongCount++
 		}
 
-		var correctAnsForReturn string
-		if !isCorrect {
-			correctAnsForReturn = q.CorrectAnswer
-		}
-
-		reviews = append(reviews, models.QuestionReview{
-			QID:           q.QID,
-			Type:          string(q.Type),
-			QuestionText:  q.QuestionText,
-			Options:       q.Options,
-			StudentAnswer: studentResp,
-			CorrectAnswer: correctAnsForReturn,
-			IsCorrect:     isCorrect,
-			PointsAwarded: awarded,
-			MaxPoints:     q.Points,
-			ImageURL:      q.ImageURL,
-		})
 	}
 
-	finalScore := sub.AutoScore + sub.ManualScore
+	finalScore := sub.AutoScore
 	var percentage float64
 	if totalPoints > 0 {
 		percentage = (finalScore / totalPoints) * 100
@@ -469,7 +454,6 @@ func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 	result := models.ResultDetail{
 		Exam:       exam,
 		Submission: sub,
-		Reviews:    reviews,
 		Stats:      stats,
 	}
 
@@ -531,29 +515,21 @@ func GetAllReleasedResultsForStudent(studentID string) ([]models.ResultSummary, 
 				continue
 			}
 
-			if qq.Type == models.WRITTEN {
-				if ans.AutoScore+ans.ManualScore > 0 {
-					correct++
-				} else {
-					wrong++
-				}
+			if ans.Response == qq.CorrectAnswer {
+				correct++
 			} else {
-				if ans.Response == qq.CorrectAnswer {
-					correct++
-				} else {
-					wrong++
-				}
+				wrong++
 			}
+
 		}
 
-		finalScore := sub.AutoScore + sub.ManualScore
-		percentage := (finalScore / totalPoints) * 100.0
+		percentage := (sub.AutoScore / totalPoints) * 100.0
 
 		results = append(results, models.ResultSummary{
 			ExamID:      examID,
 			Title:       exam.Title,
 			Date:        exam.StartTime,
-			FinalScore:  finalScore,
+			FinalScore:  sub.AutoScore,
 			TotalPoints: totalPoints,
 			Percentage:  percentage,
 		})

@@ -5,9 +5,8 @@ import "time"
 type QuestionType string
 
 const (
-	MCQ     QuestionType = "mcq"
-	TF      QuestionType = "tf"
-	WRITTEN QuestionType = "written"
+	MCQ QuestionType = "mcq"
+	TF  QuestionType = "tf"
 )
 
 type Question struct {
@@ -45,9 +44,7 @@ type Submission struct {
 	SubmittedAt time.Time         `json:"submitted_at,omitempty" firestore:"submitted_at,omitempty"`
 	Answers     map[string]Answer `json:"answers" firestore:"answers"`
 	AutoScore   float64           `json:"auto_score" firestore:"auto_score"`
-	ManualScore float64           `json:"manual_score" firestore:"manual_score"`
 	FinalScore  float64           `json:"final_score" firestore:"final_score"`
-	Graded      bool              `json:"graded" firestore:"graded"`
 	Released    bool              `json:"released" firestore:"released"`
 }
 
@@ -60,19 +57,6 @@ type ResultSummary struct {
 	Percentage  float64   `json:"percentage"`
 }
 
-type QuestionReview struct {
-	QID           string   `json:"qid" firestore:"qid"`
-	Type          string   `json:"type" firestore:"type"`
-	QuestionText  string   `json:"question_text" firestore:"question_text"`
-	Options       []string `json:"options,omitempty" firestore:"options,omitempty"`
-	StudentAnswer string   `json:"student_answer" firestore:"student_answer"`
-	CorrectAnswer string   `json:"correct_answer,omitempty" firestore:"correct_answer,omitempty"`
-	IsCorrect     bool     `json:"is_correct" firestore:"is_correct"`
-	PointsAwarded float64  `json:"points_awarded" firestore:"points_awarded"`
-	MaxPoints     float64  `json:"max_points" firestore:"max_points"`
-	ImageURL      string   `json:"image_url,omitempty" firestore:"image_url,omitempty"`
-}
-
 type ResultStats struct {
 	TotalQuestions int     `json:"total_questions" firestore:"total_questions"`
 	Correct        int     `json:"correct" firestore:"correct"`
@@ -83,8 +67,7 @@ type ResultStats struct {
 }
 
 type ResultDetail struct {
-	Exam       Exam             `json:"exam" firestore:"exam"`
-	Submission Submission       `json:"submission" firestore:"submission"`
-	Reviews    []QuestionReview `json:"reviews" firestore:"reviews"`
-	Stats      ResultStats      `json:"stats" firestore:"stats"`
+	Exam       Exam        `json:"exam" firestore:"exam"`
+	Submission Submission  `json:"submission" firestore:"submission"`
+	Stats      ResultStats `json:"stats" firestore:"stats"`
 }

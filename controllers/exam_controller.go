@@ -78,7 +78,7 @@ func ListExamsForStudent(c *gin.Context) {
 
 func ListAllExams(c *gin.Context) {
 
-	exams, err := services.GetAllExams()
+	exams, err := services.GetAllExamsForAdmin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -157,17 +157,14 @@ type GradeRequest struct {
 	Score     float64 `json:"score"`
 }
 
-func GradeAnswer(c *gin.Context) {
-	var body GradeRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
-		return
-	}
+func DeleteExam(c *gin.Context) {
 	examID := c.Param("examID")
-	if err := services.GradeWrittenAnswer(examID, body.StudentID, body.QID, body.Score); err != nil {
+
+	if err := services.DeleteExam(examID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 

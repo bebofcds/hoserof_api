@@ -63,10 +63,10 @@ func SetupRouter() *gin.Engine {
 	examAdmin.Use(middleware.RequireAuth())
 	examAdmin.Use(middleware.RequireAdmin())
 	examAdmin.POST("/create", controllers.CreateExam)
+	examAdmin.DELETE("/delete/:examID", controllers.DeleteExam)
 	examAdmin.GET("/submissions/:examID", controllers.GetSubmissionsForExam)
-	examAdmin.POST("/grade/:examID", controllers.GradeAnswer)
 	examAdmin.POST("/release/:examID", controllers.ReleaseResultsHandler)
-	examAdmin.GET("/listExams", controllers.ListAllExams)
+	examAdmin.GET("/list-exams", controllers.ListAllExams)
 
 	curriculum := r.Group("/curriculum")
 	curriculum.Use(middleware.RequireAuth())
