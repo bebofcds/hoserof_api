@@ -22,7 +22,7 @@ func CreateStudent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required", "code": "ID_REQUIRED"})
 		return
 	}
-	if err := services.CreateStudent(body); err != nil {
+	if err := services.CreateStudent(body, c); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to signup", "details": err.Error()})
 		return
 	}
@@ -40,7 +40,7 @@ func CreateStaff(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required", "code": "ID_REQUIRED"})
 		return
 	}
-	if err := services.CreateStaff(body); err != nil {
+	if err := services.CreateStaff(body, c); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to signup", "details": err.Error()})
 		return
 	}
@@ -50,10 +50,10 @@ func CreateStaff(c *gin.Context) {
 func Login(c *gin.Context) {
 	var body models.UserLogin
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid login payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid login payload", "code": "INVALID_LOGIN_PAYLOAD"})
 		return
 	}
-	resp, err := services.LoginUser(body)
+	resp, err := services.LoginUser(body, c)
 
 	if err != nil {
 		if err.Error() == "PASSWORD_REQUIRED" {
@@ -65,7 +65,7 @@ func Login(c *gin.Context) {
 		}
 
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"code":    "INVALID_LOGIN",
+			"code":    "INVALID_CREDENTIALS",
 			"message": "Invalid ID or password",
 		})
 		return

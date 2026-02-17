@@ -1,13 +1,13 @@
 package controllers
 
 import (
+	"HOSEROF_API/middleware"
 	"HOSEROF_API/models"
 	"HOSEROF_API/services"
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type UploadCurriculumBody struct {
@@ -16,9 +16,8 @@ type UploadCurriculumBody struct {
 }
 
 func UploadCurriculum(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	userID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	userID := claims.ID
 
 	var body UploadCurriculumBody
 	if err := c.ShouldBind(&body); err != nil {
@@ -43,7 +42,7 @@ func UploadCurriculum(c *gin.Context) {
 		Title:   body.Title,
 	}
 
-	curriculum, err := services.UploadCurriculum(c.Request.Context(), req, file, header, userID)
+	curriculum, err := services.UploadCurriculum(c.Request.Context(), req, file, header, userID, c)
 	if err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload curriculum"})
@@ -63,7 +62,7 @@ func GetCurriculumsByClass(c *gin.Context) {
 		return
 	}
 
-	curriculums, err := services.GetCurriculumsByClass(c.Request.Context(), classID)
+	curriculums, err := services.GetCurriculumsByClass(c.Request.Context(), classID, c)
 	if err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums"})
@@ -78,7 +77,7 @@ func GetCurriculumsByClass(c *gin.Context) {
 }
 
 func GetAllCurriculums(c *gin.Context) {
-	curriculums, err := services.GetAllCurriculums(c.Request.Context())
+	curriculums, err := services.GetAllCurriculums(c.Request.Context(), c)
 	if err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums"})
@@ -115,7 +114,7 @@ func UpdateCurriculum(c *gin.Context) {
 		"class_id": body.ClassID,
 	}
 
-	if err := services.UpdateCurriculum(c.Request.Context(), id, updates); err != nil {
+	if err := services.UpdateCurriculum(c.Request.Context(), id, updates, c); err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update curriculum"})
 		return
@@ -131,7 +130,7 @@ func DeleteCurriculum(c *gin.Context) {
 		return
 	}
 
-	if err := services.DeleteCurriculum(c.Request.Context(), id); err != nil {
+	if err := services.DeleteCurriculum(c.Request.Context(), id, c); err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete curriculum"})
 		return

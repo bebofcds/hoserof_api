@@ -12,6 +12,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/supabase-community/storage-go v0.8.1
 	golang.org/x/crypto v0.40.0
+	golang.org/x/time v0.8.0
 	google.golang.org/api v0.214.0
 	google.golang.org/grpc v1.67.3
 )
@@ -65,7 +66,6 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
-	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto v0.0.0-20241118233622-e639e219e697 // indirect

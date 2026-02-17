@@ -32,11 +32,11 @@ type UserClassList struct {
 }
 
 type UserDataResponse struct {
-	StudentToken string `json:"student_token"`
-	StudentId    string `json:"student_id"`
-	StudentName  string `json:"student_name"`
-	StudentClass string `json:"student_class"`
-	Role         string `json:"role"`
+	Token string `json:"token"`
+	Id    string `json:"id"`
+	Name  string `json:"name"`
+	Class string `json:"class"`
+	Role  string `json:"role"`
 }
 type NewStaff struct {
 	ID          string `json:"id"`

@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"HOSEROF_API/config"
 	"HOSEROF_API/controllers"
 	"HOSEROF_API/middleware"
 
@@ -9,8 +10,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter() *gin.Engine {
-	r := gin.Default()
+func SetupRouter(svc *config.Services) *gin.Engine {
+	r := gin.New()
+
+	r.Use(gin.Logger(), gin.Recovery(), middleware.RateLimit(), middleware.BodySizeLimit)
+
+	r.Use(func(c *gin.Context) {
+		c.Set("services", svc)
+		c.Next()
+	})
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
@@ -20,65 +28,54 @@ func SetupRouter() *gin.Engine {
 		AllowCredentials: true,
 	}))
 
-	r.GET("/", func(c *gin.Context) {
+	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "API is running!",
 		})
 	})
 
-	r.POST("/login", controllers.Login)
+	auth := r.Group("auth")
+	auth.POST("/login", controllers.Login)
+	auth.GET("/token-check", middleware.RequireAuth(svc.JWTSecret), controllers.TokenCheck)
 
-	admin := r.Group("/")
-	admin.Use(middleware.RequireAuth(), middleware.RequireAdmin())
-	admin.POST("/create-student", controllers.CreateStudent)
-	admin.POST("/create-staff", controllers.CreateStaff)
-
-	protected := r.Group("/")
-	protected.Use(middleware.RequireAuth())
-	protected.GET("/loginWithToken", controllers.TokenCheck)
-
-	attendance := r.Group("/attendance")
-	attendance.Use(middleware.RequireAuth())
-	attendance.GET("/get", controllers.GetAttendance)
-
-	attendanceAdmin := attendance.Group("/")
-	attendanceAdmin.Use(middleware.RequireAuth())
-	attendanceAdmin.Use(middleware.RequireAdmin())
-	attendanceAdmin.POST("/mark", controllers.MarkAttendance)
-	attendanceAdmin.GET("/get/:studentID", controllers.GetAttendanceByID)
-	attendanceAdmin.POST("/manual", controllers.MarkAttendanceManual)
-	attendanceAdmin.POST("/attendance/batch", controllers.MarkAttendanceBatch)
-	attendanceAdmin.GET("/classes/:classId", controllers.GetStudentsByClass)
-	attendanceAdmin.GET("profile/:userId", controllers.GetUserByID)
-
-	exam := r.Group("/exam")
-	exam.Use(middleware.RequireAuth())
-	exam.GET("/list", controllers.ListExamsForStudent)
-	exam.GET("/:examID", controllers.GetExamForStudent)
-	exam.POST("/submit/:examID", controllers.SubmitExam)
-	exam.GET("/result/:examID", controllers.GetReleasedResultForStudent)
-	exam.GET("/results", controllers.ListReleasedResults)
-
-	examAdmin := exam.Group("/")
-	examAdmin.Use(middleware.RequireAuth())
-	examAdmin.Use(middleware.RequireAdmin())
-	examAdmin.POST("/create", controllers.CreateExam)
-	examAdmin.DELETE("/delete/:examID", controllers.DeleteExam)
-	examAdmin.GET("/submissions/:examID", controllers.GetSubmissionsForExam)
-	examAdmin.POST("/release/:examID", controllers.ReleaseResultsHandler)
+	admin := r.Group("/admin")
+	admin.Use(middleware.RequireAuth(svc.JWTSecret), middleware.RequireAdmin())
+	//Admin Users Management Endpoints
+	users := admin.Group("/users")
+	users.POST("/create-student", controllers.CreateStudent)
+	users.POST("/create-staff", controllers.CreateStaff)
+	//Admin Attendance Endpoints
+	attendanceAdmin := admin.Group("/attendance")
+	attendanceAdmin.POST("/mark-attendance", controllers.MarkAttendance)
+	attendanceAdmin.GET("/get-attendance/:studentID", controllers.GetAttendanceByID)
+	attendanceAdmin.POST("/mark-batch", controllers.MarkAttendanceBatch)
+	attendanceAdmin.GET("/class/:classId", controllers.GetStudentsByClass)
+	attendanceAdmin.GET("/profile/:userId", controllers.GetUserByID)
+	//Admin Exam Management Endpoints
+	examAdmin := admin.Group("/exam")
+	examAdmin.POST("/create-exam", controllers.CreateExam)
+	examAdmin.DELETE("/delete-exam/:exam_id", controllers.DeleteExam)
+	examAdmin.GET("/submissions/:exam_id", controllers.GetSubmissionsForExam)
+	examAdmin.POST("/release-results/:exam_id", controllers.ReleaseResultsHandler)
 	examAdmin.GET("/list-exams", controllers.ListAllExams)
-
-	curriculum := r.Group("/curriculum")
-	curriculum.Use(middleware.RequireAuth())
-	curriculum.GET("/class/:class_id", controllers.GetCurriculumsByClass)
-
-	curriculumAdmin := curriculum.Group("/")
-	curriculumAdmin.Use(middleware.RequireAuth())
-	curriculumAdmin.Use(middleware.RequireAdmin())
+	//Admin Curriculum Management Endpoints
+	curriculumAdmin := admin.Group("/curriculum")
 	curriculumAdmin.GET("/", controllers.GetAllCurriculums)
-	curriculumAdmin.POST("/upload", controllers.UploadCurriculum)
-	curriculumAdmin.PUT("/:id", controllers.UpdateCurriculum)
-	curriculumAdmin.DELETE("/:id", controllers.DeleteCurriculum)
+	curriculumAdmin.POST("/upload-curriculum", controllers.UploadCurriculum)
+	curriculumAdmin.PUT("/:curriculum_id", controllers.UpdateCurriculum)
+	curriculumAdmin.DELETE("/:curriculum_id", controllers.DeleteCurriculum)
+
+	students := r.Group("/students")
+	students.Use(middleware.RequireAuth(svc.JWTSecret))
+	students.GET("/attendance/get-attendance", controllers.GetAttendance)
+	exam := students.Group("/exam")
+	exam.GET("/list-exams", controllers.ListExamsForStudent)
+	exam.GET("/show-exam/:exam_id", controllers.GetExamForStudent)
+	exam.POST("/submit-exam/:exam_id", controllers.SubmitExam)
+	exam.GET("/get-result/:exam_id", controllers.GetReleasedResultForStudent)
+	exam.GET("/list-results", controllers.ListReleasedResults)
+	curriculum := students.Group("/curriculum")
+	curriculum.GET("/class/:class_id", controllers.GetCurriculumsByClass)
 
 	return r
 }

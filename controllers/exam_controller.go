@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	"HOSEROF_API/middleware"
 	"HOSEROF_API/models"
 	"HOSEROF_API/services"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type CreateExamBody struct {
@@ -23,9 +23,8 @@ type CreateExamBody struct {
 }
 
 func CreateExam(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	adminID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	adminID := claims.ID
 
 	var body CreateExamBody
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -41,7 +40,7 @@ func CreateExam(c *gin.Context) {
 		EndTime:          body.EndTime,
 		CreatedBy:        adminID,
 	}
-	id, err := services.CreateExam(exam, body.Questions)
+	id, err := services.CreateExam(exam, body.Questions, c)
 	if err != nil {
 		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create exam"})
@@ -51,11 +50,10 @@ func CreateExam(c *gin.Context) {
 }
 
 func ListExamsForStudent(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	userClass, ok := claims["user_class"].(string)
-	studentID := claims["user_ID"].(string)
-	if !ok || userClass == "" {
+	claims := c.MustGet("claims").(*middleware.Claims)
+	userClass := claims.UserClass
+	studentID := claims.ID
+	if userClass == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "user_class missing from token",
 		})
@@ -63,7 +61,7 @@ func ListExamsForStudent(c *gin.Context) {
 	}
 
 	class := userClass
-	exams, err := services.GetExamsForClass(class, studentID)
+	exams, err := services.GetExamsForClass(class, studentID, c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -78,7 +76,7 @@ func ListExamsForStudent(c *gin.Context) {
 
 func ListAllExams(c *gin.Context) {
 
-	exams, err := services.GetAllExamsForAdmin()
+	exams, err := services.GetAllExamsForAdmin(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -93,7 +91,7 @@ func ListAllExams(c *gin.Context) {
 
 func GetExamForStudent(c *gin.Context) {
 	examID := c.Param("examID")
-	qs, err := services.GetExamQuestions(examID, true)
+	qs, err := services.GetExamQuestions(examID, true, c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get exam"})
 		return
@@ -111,9 +109,8 @@ type SubmitBody struct {
 }
 
 func SubmitExam(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	studentID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	studentID := claims.ID
 
 	examID := c.Param("examID")
 	var body SubmitBody
@@ -130,7 +127,7 @@ func SubmitExam(c *gin.Context) {
 		}
 	}
 
-	err := services.SubmitExam(examID, studentID, parsed)
+	err := services.SubmitExam(examID, studentID, parsed, c)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -140,7 +137,7 @@ func SubmitExam(c *gin.Context) {
 
 func GetSubmissionsForExam(c *gin.Context) {
 	examID := c.Param("examID")
-	subs, err := services.GetAllSubmissions(examID)
+	subs, err := services.GetAllSubmissions(examID, c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get submissions"})
 		return
@@ -160,7 +157,7 @@ type GradeRequest struct {
 func DeleteExam(c *gin.Context) {
 	examID := c.Param("examID")
 
-	if err := services.DeleteExam(examID); err != nil {
+	if err := services.DeleteExam(examID, c); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -170,7 +167,7 @@ func DeleteExam(c *gin.Context) {
 
 func ReleaseResultsHandler(c *gin.Context) {
 	examID := c.Param("examID")
-	if err := services.ReleaseResults(examID); err != nil {
+	if err := services.ReleaseResults(examID, c); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to release results"})
 		return
 	}
@@ -178,13 +175,12 @@ func ReleaseResultsHandler(c *gin.Context) {
 }
 
 func GetReleasedResultForStudent(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	studentID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	studentID := claims.ID
 
 	examID := c.Param("examID")
 
-	result, err := services.GetReleasedResult(examID, studentID)
+	result, err := services.GetReleasedResult(examID, studentID, c)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -193,11 +189,10 @@ func GetReleasedResultForStudent(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 func ListReleasedResults(c *gin.Context) {
-	token := c.MustGet("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims)
-	studentID := claims["user_ID"].(string)
+	claims := c.MustGet("claims").(*middleware.Claims)
+	studentID := claims.ID
 
-	results, err := services.GetAllReleasedResultsForStudent(studentID)
+	results, err := services.GetAllReleasedResultsForStudent(studentID, c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load results"})
 		return

@@ -1,3 +1,40 @@
+/*
+================================================================================
+HOSEROF_API - Curriculum Services
+================================================================================
+
+Description:
+This package provides service-level functions for managing curriculum files
+within the HosErof system. It supports uploading, retrieving, updating,
+and deleting curriculum files, while storing metadata in Firestore and files
+in Supabase storage.
+
+Responsibilities:
+1. UploadCurriculum        - Uploads a curriculum file to Supabase, saves metadata in Firestore.
+2. GetCurriculumsByClass   - Retrieves all curriculums for a specific class.
+3. GetAllCurriculums       - Retrieves all curriculums in the system, sorted by class.
+4. UpdateCurriculum        - Updates curriculum metadata (title, class_id).
+5. DeleteCurriculum        - Deletes a curriculum file from Supabase and its Firestore metadata.
+6. getFileType             - Helper function to classify file type based on extension.
+
+Usage Notes:
+- All functions require a Gin context (`*gin.Context`) to extract services.
+- UploadCurriculum requires multipart file input.
+- File types are automatically inferred for categorization.
+- Firestore collections:
+    - "curriculums" → stores metadata for each curriculum.
+- Supabase storage bucket: "Curriculum".
+
+Error Handling:
+- UploadCurriculum removes uploaded file from Supabase if Firestore save fails.
+- DeleteCurriculum logs a warning if the file cannot be removed from Supabase, but continues.
+- Iteration over Firestore documents handles `iterator.Done` gracefully.
+
+Date Format Reference:
+- CreatedAt and UpdatedAt timestamps use `time.Now()` in Go's local timezone.
+================================================================================
+*/
+
 package services
 
 import (
@@ -12,20 +49,16 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	storage_go "github.com/supabase-community/storage-go"
 	"google.golang.org/api/iterator"
 )
 
-var supabaseStorage *storage_go.Client
-
-func InitSupabaseStorage() error {
-	supabaseStorage = config.SupabaseStorage
-	return nil
-}
-
-func UploadCurriculum(ctx context.Context, req models.UploadCurriculumRequest, file multipart.File, header *multipart.FileHeader, userID string) (*models.Curriculum, error) {
+// UploadCurriculum uploads a file to Supabase, stores metadata in Firestore, and returns the curriculum.
+func UploadCurriculum(ctx context.Context, req models.UploadCurriculumRequest, file multipart.File, header *multipart.FileHeader, userID string, c *gin.Context) (*models.Curriculum, error) {
 	ext := filepath.Ext(header.Filename)
+	services := config.GetServices(c)
+
 	uniqueFilename := fmt.Sprintf("%s_%s%s", req.ClassID, uuid.New().String(), ext)
 	storagePath := fmt.Sprintf("%s/%s", req.ClassID, uniqueFilename)
 
@@ -36,12 +69,13 @@ func UploadCurriculum(ctx context.Context, req models.UploadCurriculumRequest, f
 
 	fileReader := bytes.NewReader(fileBytes)
 
-	_, err = config.SupabaseStorage.UploadFile("Curriculum", storagePath, fileReader)
+	// Upload file to Supabase
+	_, err = services.Supabase.Storage.UploadFile("Curriculum", storagePath, fileReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload to supabase: %w", err)
 	}
-
-	resp := config.SupabaseStorage.GetPublicUrl("Curriculum", storagePath)
+	// Get public URL of uploaded file
+	resp := services.Supabase.Storage.GetPublicUrl("Curriculum", storagePath)
 	fileURL := resp.SignedURL
 
 	fileType := getFileType(ext)
@@ -58,20 +92,23 @@ func UploadCurriculum(ctx context.Context, req models.UploadCurriculumRequest, f
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-
-	_, err = config.DB.Collection("curriculums").Doc(curriculum.ID).Set(ctx, curriculum)
+	// Save metadata in Firestore
+	_, err = services.Firebase.DB.Collection("curriculums").Doc(curriculum.ID).Set(ctx, curriculum)
 	if err != nil {
-		config.SupabaseStorage.RemoveFile("Curriculum", []string{storagePath})
+		// Remove file from Supabase if Firestore save fails
+		services.Supabase.Storage.RemoveFile("Curriculum", []string{storagePath})
 		return nil, fmt.Errorf("failed to save metadata: %w", err)
 	}
 
 	return curriculum, nil
 }
 
-func GetCurriculumsByClass(ctx context.Context, classID string) ([]models.Curriculum, error) {
+// GetCurriculumsByClass returns all curriculums for a specific class.
+func GetCurriculumsByClass(ctx context.Context, classID string, c *gin.Context) ([]models.Curriculum, error) {
 	var curriculums []models.Curriculum
+	services := config.GetServices(c)
 
-	iter := config.DB.Collection("curriculums").
+	iter := services.Firebase.DB.Collection("curriculums").
 		Where("class_id", "==", classID).
 		Documents(ctx)
 
@@ -94,10 +131,12 @@ func GetCurriculumsByClass(ctx context.Context, classID string) ([]models.Curric
 	return curriculums, nil
 }
 
-func GetAllCurriculums(ctx context.Context) ([]models.Curriculum, error) {
+// GetAllCurriculums returns all curriculums sorted by class ID.
+func GetAllCurriculums(ctx context.Context, c *gin.Context) ([]models.Curriculum, error) {
 	var curriculums []models.Curriculum
+	services := config.GetServices(c)
 
-	iter := config.DB.Collection("curriculums").
+	iter := services.Firebase.DB.Collection("curriculums").
 		OrderBy("class_id", firestore.Asc).
 		Documents(ctx)
 
@@ -120,10 +159,12 @@ func GetAllCurriculums(ctx context.Context) ([]models.Curriculum, error) {
 	return curriculums, nil
 }
 
-func UpdateCurriculum(ctx context.Context, id string, updates map[string]interface{}) error {
+// UpdateCurriculum updates curriculum metadata (title, class ID) and timestamps.
+func UpdateCurriculum(ctx context.Context, id string, updates map[string]interface{}, c *gin.Context) error {
 	updates["updated_at"] = time.Now()
+	services := config.GetServices(c)
 
-	_, err := config.DB.Collection("curriculums").Doc(id).Update(ctx, []firestore.Update{
+	_, err := services.Firebase.DB.Collection("curriculums").Doc(id).Update(ctx, []firestore.Update{
 		{Path: "title", Value: updates["title"]},
 		{Path: "class_id", Value: updates["class_id"]},
 		{Path: "updated_at", Value: updates["updated_at"]},
@@ -132,9 +173,11 @@ func UpdateCurriculum(ctx context.Context, id string, updates map[string]interfa
 	return err
 }
 
-func DeleteCurriculum(ctx context.Context, id string) error {
+// DeleteCurriculum removes a curriculum file from Supabase and its metadata from Firestore.
+func DeleteCurriculum(ctx context.Context, id string, c *gin.Context) error {
+	services := config.GetServices(c)
 
-	doc, err := config.DB.Collection("curriculums").Doc(id).Get(ctx)
+	doc, err := services.Firebase.DB.Collection("curriculums").Doc(id).Get(ctx)
 	if err != nil {
 		return fmt.Errorf("curriculum not found: %w", err)
 	}
@@ -148,21 +191,23 @@ func DeleteCurriculum(ctx context.Context, id string) error {
 	filenameFromID := fmt.Sprintf("%s_%s%s", curriculum.ClassID, id, ext)
 	storagePath := fmt.Sprintf("curriculum/%s/%s", curriculum.ClassID, filenameFromID)
 
-	if _, err = config.SupabaseStorage.RemoveFile("curriculum", []string{storagePath}); err != nil {
+	// Remove file from Supabase
+	if _, err = services.Supabase.Storage.RemoveFile("curriculum", []string{storagePath}); err != nil {
 		fmt.Printf("Warning: failed to delete file from Supabase: %v\n", err)
 	}
-
-	if _, err = config.DB.Collection("curriculums").Doc(id).Delete(ctx); err != nil {
+	// Remove metadata from Firestore
+	if _, err = services.Firebase.DB.Collection("curriculums").Doc(id).Delete(ctx); err != nil {
 		return fmt.Errorf("failed to delete from firestore: %w", err)
 	}
 	return nil
 }
 
+// getFileType returns the type of file based on its extension.
 func getFileType(ext string) string {
 	switch ext {
 	case ".pdf":
 		return "pdf"
-	case ".mp3", ".wav", ".ogg", ".m4a" , ".mpeg":
+	case ".mp3", ".wav", ".ogg", ".m4a", ".mpeg":
 		return "audio"
 	case ".mp4", ".avi", ".mov", ".wmv":
 		return "video"
