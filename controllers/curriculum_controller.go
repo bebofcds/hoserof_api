@@ -58,14 +58,13 @@ func UploadCurriculum(c *gin.Context) {
 func GetCurriculumsByClass(c *gin.Context) {
 	classID := c.Param("class_id")
 	if classID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "class_id is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "class_id is required", "code": "ID_REQUIRED"})
 		return
 	}
 
 	curriculums, err := services.GetCurriculumsByClass(c.Request.Context(), classID, c)
 	if err != nil {
-		log.Print(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums", "details": err.Error()})
 		return
 	}
 
@@ -79,7 +78,6 @@ func GetCurriculumsByClass(c *gin.Context) {
 func GetAllCurriculums(c *gin.Context) {
 	curriculums, err := services.GetAllCurriculums(c.Request.Context(), c)
 	if err != nil {
-		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums"})
 		return
 	}
@@ -126,13 +124,13 @@ func UpdateCurriculum(c *gin.Context) {
 func DeleteCurriculum(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required", "code": "ID_REQUIRED"})
 		return
 	}
 
 	if err := services.DeleteCurriculum(c.Request.Context(), id, c); err != nil {
 		log.Print(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete curriculum"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete curriculum", "code": "OPERATION_FAILED"})
 		return
 	}
 

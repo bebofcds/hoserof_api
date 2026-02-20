@@ -62,8 +62,8 @@ func SetupRouter(svc *config.Services) *gin.Engine {
 	curriculumAdmin := admin.Group("/curriculum")
 	curriculumAdmin.GET("/", controllers.GetAllCurriculums)
 	curriculumAdmin.POST("/upload-curriculum", controllers.UploadCurriculum)
-	curriculumAdmin.PUT("/:curriculum_id", controllers.UpdateCurriculum)
-	curriculumAdmin.DELETE("/:curriculum_id", controllers.DeleteCurriculum)
+	curriculumAdmin.PUT("/:id", controllers.UpdateCurriculum)
+	curriculumAdmin.DELETE("/:id", controllers.DeleteCurriculum)
 
 	students := r.Group("/students")
 	students.Use(middleware.RequireAuth(svc.JWTSecret))
