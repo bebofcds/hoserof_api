@@ -4,7 +4,6 @@ import (
 	"HOSEROF_API/middleware"
 	"HOSEROF_API/models"
 	"HOSEROF_API/services"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,19 +20,19 @@ func UploadCurriculum(c *gin.Context) {
 
 	var body UploadCurriculumBody
 	if err := c.ShouldBind(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "code": "INVALID_PAYLOAD"})
 		return
 	}
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required", "code": "FILE_REQUIRED"})
 		return
 	}
 	defer file.Close()
 
 	if header.Size > 50*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file size must be less than 50MB"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file size must be less than 50MB", "code": "FILE_LIMIT"})
 		return
 	}
 
@@ -44,8 +43,7 @@ func UploadCurriculum(c *gin.Context) {
 
 	curriculum, err := services.UploadCurriculum(c.Request.Context(), req, file, header, userID, c)
 	if err != nil {
-		log.Print(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload curriculum"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload curriculum", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -64,7 +62,7 @@ func GetCurriculumsByClass(c *gin.Context) {
 
 	curriculums, err := services.GetCurriculumsByClass(c.Request.Context(), classID, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -78,7 +76,7 @@ func GetCurriculumsByClass(c *gin.Context) {
 func GetAllCurriculums(c *gin.Context) {
 	curriculums, err := services.GetAllCurriculums(c.Request.Context(), c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get curriculums", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -97,13 +95,13 @@ type UpdateCurriculumBody struct {
 func UpdateCurriculum(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required", "code": "ID_REQUIRED"})
 		return
 	}
 
 	var body UpdateCurriculumBody
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "code": "INVALID_PAYLOAD"})
 		return
 	}
 
@@ -113,8 +111,7 @@ func UpdateCurriculum(c *gin.Context) {
 	}
 
 	if err := services.UpdateCurriculum(c.Request.Context(), id, updates, c); err != nil {
-		log.Print(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update curriculum"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update curriculum", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -129,7 +126,6 @@ func DeleteCurriculum(c *gin.Context) {
 	}
 
 	if err := services.DeleteCurriculum(c.Request.Context(), id, c); err != nil {
-		log.Print(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete curriculum", "code": "OPERATION_FAILED"})
 		return
 	}

@@ -608,3 +608,188 @@ func GetAllReleasedResultsForStudent(studentID string, c *gin.Context) ([]models
 
 	return results, nil
 }
+
+// SubmittedExamWithAnswers represents an exam submission with detailed answer analysis
+type SubmittedExamWithAnswers struct {
+	Exam           models.Exam             `json:"exam"`
+	Submission     models.Submission       `json:"submission"`
+	Questions      []models.Question       `json:"questions"`
+	AnswerAnalysis map[string]AnswerDetail `json:"answer_analysis"`
+	Stats          models.ResultStats      `json:"stats"`
+}
+
+// AnswerDetail provides information about a student's answer
+type AnswerDetail struct {
+	Question      models.Question `json:"question"`
+	StudentAnswer string          `json:"student_answer"`
+	CorrectAnswer string          `json:"correct_answer"`
+	IsCorrect     bool            `json:"is_correct"`
+	AutoScore     float64         `json:"auto_score"`
+	ManualScore   float64         `json:"manual_score"`
+}
+
+// SubmittedExamSummary represents a simple exam submission summary without detailed answers
+type SubmittedExamSummary struct {
+	Exam       models.Exam       `json:"exam"`
+	Submission models.Submission `json:"submission"`
+}
+
+// GetStudentSubmittedExams retrieves exam metadata for all exams submitted by a student
+func GetStudentSubmittedExams(studentID string, c *gin.Context) ([]models.Exam, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
+
+	// Get all exams
+	examsIter := services.Firebase.DB.Collection("exams").Documents(ctx)
+	var submittedExams []models.Exam
+
+	for {
+		examDoc, err := examsIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var exam models.Exam
+		if err := examDoc.DataTo(&exam); err != nil {
+			continue
+		}
+
+		// Check if student submitted this exam
+		subSnap, err := examDoc.Ref.Collection("submissions").Doc(studentID).Get(ctx)
+		if err != nil || !subSnap.Exists() {
+			continue // Student didn't submit this exam
+		}
+
+		// Only return exam metadata
+		submittedExams = append(submittedExams, exam)
+	}
+
+	return submittedExams, nil
+}
+
+// GetStudentExamResultDetails retrieves detailed results for a specific exam submission
+func GetStudentExamResultDetails(studentID, examID string, c *gin.Context) (*SubmittedExamWithAnswers, error) {
+	ctx := c.Request.Context()
+	services := config.GetServices(c)
+
+	examDoc := services.Firebase.DB.Collection("exams").Doc(examID)
+	examSnap, err := examDoc.Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("exam not found: %w", err)
+	}
+
+	var exam models.Exam
+	if err := examSnap.DataTo(&exam); err != nil {
+		return nil, err
+	}
+
+	// Check if student submitted this exam
+	subSnap, err := examDoc.Collection("submissions").Doc(studentID).Get(ctx)
+	if err != nil || !subSnap.Exists() {
+		return nil, errors.New("submission not found")
+	}
+
+	var submission models.Submission
+	if err := subSnap.DataTo(&submission); err != nil {
+		return nil, err
+	}
+
+	// Get all questions for this exam
+	qIter := examDoc.Collection("questions").Documents(ctx)
+	questions := make(map[string]models.Question)
+	var questionList []models.Question
+	var totalPoints float64
+
+	for {
+		qDoc, err := qIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			break
+		}
+
+		var q models.Question
+		if err := qDoc.DataTo(&q); err != nil {
+			continue
+		}
+		questions[q.QID] = q
+		questionList = append(questionList, q)
+		totalPoints += q.Points
+	}
+
+	// Analyze answers
+	answerAnalysis := make(map[string]AnswerDetail)
+	correctCount := 0
+	wrongCount := 0
+
+	for qid, q := range questions {
+		ans, hasAnswer := submission.Answers[qid]
+		studentResp := ""
+		autoScore := 0.0
+		manualScore := 0.0
+		isCorrect := false
+
+		if hasAnswer {
+			studentResp = ans.Response
+			autoScore = ans.AutoScore
+			manualScore = ans.ManualScore
+		}
+
+		// Determine if answer is correct
+		switch q.Type {
+		case models.MCQ, models.TF:
+			stud := strings.TrimSpace(strings.ToLower(studentResp))
+			corr := strings.TrimSpace(strings.ToLower(fmt.Sprint(q.CorrectAnswer)))
+			if stud != "" && stud == corr {
+				isCorrect = true
+			}
+		default:
+			// For other types, check if points were awarded
+			if autoScore+manualScore >= q.Points {
+				isCorrect = true
+			}
+		}
+
+		if isCorrect {
+			correctCount++
+		} else {
+			wrongCount++
+		}
+
+		answerAnalysis[qid] = AnswerDetail{
+			Question:      q,
+			StudentAnswer: studentResp,
+			CorrectAnswer: q.CorrectAnswer,
+			IsCorrect:     isCorrect,
+			AutoScore:     autoScore,
+			ManualScore:   manualScore,
+		}
+	}
+
+	finalScore := submission.AutoScore
+	var percentage float64
+	if totalPoints > 0 {
+		percentage = (finalScore / totalPoints) * 100
+	}
+
+	stats := models.ResultStats{
+		TotalQuestions: len(questions),
+		Correct:        correctCount,
+		Wrong:          wrongCount,
+		TotalPoints:    totalPoints,
+		FinalScore:     finalScore,
+		Percentage:     percentage,
+	}
+
+	return &SubmittedExamWithAnswers{
+		Exam:           exam,
+		Submission:     submission,
+		Questions:      questionList,
+		AnswerAnalysis: answerAnalysis,
+		Stats:          stats,
+	}, nil
+}

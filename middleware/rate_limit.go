@@ -45,7 +45,7 @@ func getLimiter(ip string) *rate.Limiter {
 		return client.limiter
 	}
 
-	limiter := rate.NewLimiter(rate.Every(1*time.Minute), 10)
+	limiter := rate.NewLimiter(rate.Every(1*time.Minute), 30)
 	clients[ip] = &clientLimiter{
 		limiter:  limiter,
 		lastSeen: time.Now(),

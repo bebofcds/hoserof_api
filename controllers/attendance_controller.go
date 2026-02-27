@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"HOSEROF_API/services"
-	"log"
 	"net/http"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -16,11 +15,11 @@ func MarkAttendance(c *gin.Context) {
 		Attended  bool   `json:"attended"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "code": "INVALID_PAYLOAD"})
 		return
 	}
 	if body.StudentID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "studentId required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "studentId required", "code": "ID_REQUIRED"})
 		return
 	}
 	err := services.MarkAttendance(body.StudentID, body.Attended, c)
@@ -28,12 +27,11 @@ func MarkAttendance(c *gin.Context) {
 	if err != nil {
 
 		if err.Error() == "no user found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "no user found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "no user found", "code": "NOT_FOUND"})
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save attendance"})
-		log.Print(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save attendance", "code": "SERVER_ERROR"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
@@ -83,7 +81,7 @@ func GetAttendance(c *gin.Context) {
 
 	resp, err := services.GetAttendance(studentID, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get attendance"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get attendance", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -94,7 +92,7 @@ func GetAttendanceByID(c *gin.Context) {
 	studentID := c.Param("studentID")
 
 	if studentID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required", "code": "ID_REQUIRED"})
 		return
 	}
 	resp, err := services.GetAttendance(studentID, c)
@@ -102,11 +100,11 @@ func GetAttendanceByID(c *gin.Context) {
 	if err != nil {
 
 		if err.Error() == "no user found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "no user found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "no user found", "code": "NOT_FOUND"})
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get attendance"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get attendance", "code": "SERVER_ERROR"})
 		return
 	}
 	c.JSON(http.StatusOK, resp)
@@ -118,13 +116,13 @@ func GetStudentsByClass(c *gin.Context) {
 	hideMarkedToday := c.Query("hideMarkedToday") == "true"
 
 	if classID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "classId is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "classId is required", "code": "ID_REQUIRED"})
 		return
 	}
 
 	students, err := services.GetStudentsByClass(classID, hideMarkedToday, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get students"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get students", "code": "SERVER_ERROR"})
 		return
 	}
 
@@ -139,41 +137,20 @@ func MarkAttendanceBatch(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "code": "INVALID_PAYLOAD"})
 		return
 	}
 
 	if len(body) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "empty payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "empty payload", "code": "INVALID_PAYLOAD"})
 		return
 	}
 
 	err := services.MarkAttendanceBatch(body, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save attendance"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save attendance", "code": "SERVER_ERROR"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-
-func GetUserByID(c *gin.Context) {
-	userID := c.Param("userId")
-
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "userId is required"})
-		return
-	}
-
-	user, err := services.GetUserByID(userID, c)
-	if err != nil {
-		if err.Error() == "user not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed"})
-		return
-	}
-
-	c.JSON(http.StatusOK, user)
 }

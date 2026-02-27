@@ -13,7 +13,7 @@ import (
 func SetupRouter(svc *config.Services) *gin.Engine {
 	r := gin.New()
 
-	r.Use(gin.Logger(), gin.Recovery(), middleware.RateLimit(), middleware.BodySizeLimit)
+	r.Use(gin.Logger(), gin.Recovery(), middleware.BodySizeLimit)
 
 	r.Use(func(c *gin.Context) {
 		c.Set("services", svc)
@@ -36,7 +36,6 @@ func SetupRouter(svc *config.Services) *gin.Engine {
 
 	auth := r.Group("auth")
 	auth.POST("/login", controllers.Login)
-	auth.GET("/token-check", middleware.RequireAuth(svc.JWTSecret), controllers.TokenCheck)
 
 	admin := r.Group("/admin")
 	admin.Use(middleware.RequireAuth(svc.JWTSecret), middleware.RequireAdmin())
@@ -44,20 +43,28 @@ func SetupRouter(svc *config.Services) *gin.Engine {
 	users := admin.Group("/users")
 	users.POST("/create-student", controllers.CreateStudent)
 	users.POST("/create-staff", controllers.CreateStaff)
+	users.PUT("/update-student/:studentID", controllers.UpdateStudent)
+	users.DELETE("/delete-student/:studentID", controllers.DeleteStudent)
+	users.PUT("/update-staff/:staffID", controllers.UpdateStaff)
+	users.DELETE("/delete-staff/:staffID", controllers.DeleteStaff)
+	users.GET("/student-profile/:userId", controllers.GetStudentByID)
+	users.GET("/staff-profile/:userId", controllers.GetStaffByID)
+	users.GET("/staff", controllers.GetStaff)
 	//Admin Attendance Endpoints
 	attendanceAdmin := admin.Group("/attendance")
 	attendanceAdmin.POST("/mark-attendance", controllers.MarkAttendance)
 	attendanceAdmin.GET("/get-attendance/:studentID", controllers.GetAttendanceByID)
 	attendanceAdmin.POST("/mark-batch", controllers.MarkAttendanceBatch)
 	attendanceAdmin.GET("/class/:classId", controllers.GetStudentsByClass)
-	attendanceAdmin.GET("/profile/:userId", controllers.GetUserByID)
 	//Admin Exam Management Endpoints
 	examAdmin := admin.Group("/exam")
 	examAdmin.POST("/create-exam", controllers.CreateExam)
 	examAdmin.DELETE("/delete-exam/:exam_id", controllers.DeleteExam)
+	examAdmin.GET("/show-exam/:exam_id", controllers.GetExamForAdmin)
 	examAdmin.GET("/submissions/:exam_id", controllers.GetSubmissionsForExam)
-	examAdmin.POST("/release-results/:exam_id", controllers.ReleaseResultsHandler)
+	examAdmin.POST("/release-results/:exam_id", controllers.ReleaseResults)
 	examAdmin.GET("/list-exams", controllers.ListAllExams)
+	examAdmin.GET("/submitted-exams/:student_id", controllers.GetStudentSubmittedExams)
 	//Admin Curriculum Management Endpoints
 	curriculumAdmin := admin.Group("/curriculum")
 	curriculumAdmin.GET("/", controllers.GetAllCurriculums)

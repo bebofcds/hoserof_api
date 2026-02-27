@@ -38,6 +38,15 @@ type UserDataResponse struct {
 	Class string `json:"class"`
 	Role  string `json:"role"`
 }
+
+type Staff struct {
+	ID    string `firestore:"id"`
+	Name  string `firestore:"name"`
+	Class string `firestore:"class"`
+	Phone string `firestore:"phonenumber"`
+	Role  string `firestore:"role"`
+}
+
 type NewStaff struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -54,4 +63,25 @@ type StaffFirestore struct {
 	Phone    string `firestore:"phonenumber"`
 	Password string `firestore:"password"`
 	Role     string `firestore:"role"`
+}
+
+type StaffList struct {
+	ID    string `firestore:"id"`
+	Name  string `firestore:"name"`
+	Class string `firestore:"class"`
+}
+
+type UpdateStudent struct {
+	StudentName        string `json:"student_name"`
+	StudentPhoneNumber string `json:"student_phonenumber"`
+	StudentAge         string `json:"student_age"`
+	StudentGrade       string `json:"student_grade"`
+	StudentClass       string `json:"student_class"`
+}
+
+type UpdateStaff struct {
+	Name        string `json:"name"`
+	PhoneNumber string `json:"phoneNumber"`
+	Class       string `json:"class"`
+	Password    string `json:"password"`
 }

@@ -174,7 +174,7 @@ func GetStudentsByClass(classID string, hideMarked bool, c *gin.Context) ([]mode
 		Where("student_class", "==", classID).
 		Documents(ctx)
 
-	var students []models.UserClassList
+	students := []models.UserClassList{}
 	today := time.Now().Format("2006-01-02")
 
 	for {
@@ -253,26 +253,4 @@ func MarkAttendanceBatch(records []struct {
 
 	_, err := batch.Commit(ctx)
 	return err
-}
-
-// GetUserByID retrieves a single user by their Firestore ID.
-func GetUserByID(userID string, c *gin.Context) (models.UserFirestore, error) {
-	ctx := c.Request.Context()
-	services := config.GetServices(c)
-
-	doc, err := services.Firebase.DB.Collection("students").Doc(userID).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return models.UserFirestore{}, errors.New("user not found")
-		}
-		return models.UserFirestore{}, err
-	}
-
-	var user models.UserFirestore
-	if err := doc.DataTo(&user); err != nil {
-		return models.UserFirestore{}, err
-	}
-
-	user.StudentID = doc.Ref.ID
-	return user, nil
 }

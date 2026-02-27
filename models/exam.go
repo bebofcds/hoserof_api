@@ -33,7 +33,6 @@ type Exam struct {
 type Answer struct {
 	QID         string  `json:"qid" firestore:"qid"`
 	Response    string  `json:"response" firestore:"response"`
-	ImageURL    string  `json:"image_url,omitempty" firestore:"image_url,omitempty"`
 	AutoScore   float64 `json:"auto_score,omitempty" firestore:"auto_score,omitempty"`
 	ManualScore float64 `json:"manual_score,omitempty" firestore:"manual_score,omitempty"`
 }
