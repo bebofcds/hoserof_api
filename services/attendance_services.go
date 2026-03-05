@@ -45,6 +45,7 @@ package services
 import (
 	"HOSEROF_API/config"
 	"HOSEROF_API/models"
+	"context"
 	"errors"
 	"time"
 
@@ -58,31 +59,55 @@ import (
 // MarkAttendance marks attendance for today for a specific student.
 func MarkAttendance(studentID string, attended bool, c *gin.Context) error {
 	ctx := c.Request.Context()
-	services := config.GetServices(c)
-	studentDoc := services.Firebase.DB.Collection("students").Doc(studentID)
+	svcs := config.GetServices(c)
 
-	snap, err := studentDoc.Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return errors.New("no user found")
+	return svcs.Firebase.DB.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+
+		studentRef := svcs.Firebase.DB.Collection("students").Doc(studentID)
+
+		_, err := tx.Get(studentRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return errors.New("no user found")
+			}
+			return err
 		}
-		return err
-	}
 
-	if !snap.Exists() {
-		return errors.New("no user found")
-	}
+		today := time.Now().Format("2006-01-02")
+		attendanceRef := studentRef.Collection("attendance").Doc(today)
 
-	attendanceDoc := studentDoc.
-		Collection("attendance").
-		Doc(time.Now().Format("2006-01-02"))
+		_, err = tx.Get(attendanceRef)
+		alreadyMarked := err == nil
 
-	_, err = attendanceDoc.Set(ctx, map[string]interface{}{
-		"attended":  attended,
-		"timestamp": firestore.ServerTimestamp,
-	}, firestore.MergeAll)
+		// Write attendance record
+		if err := tx.Set(attendanceRef, map[string]interface{}{
+			"attended":  attended,
+			"timestamp": firestore.ServerTimestamp,
+		}, firestore.MergeAll); err != nil {
+			return err
+		}
 
-	return err
+		// Only update counters if not already marked
+		if !alreadyMarked {
+
+			update := map[string]interface{}{
+				"total_days":           firestore.Increment(1),
+				"last_attendance_date": today,
+			}
+
+			if attended {
+				update["attended_days"] = firestore.Increment(1)
+			} else {
+				update["absent_days"] = firestore.Increment(1)
+			}
+
+			if err := tx.Set(studentRef, update, firestore.MergeAll); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 // MarkAttendanceManual marks attendance for a specific datetime.
@@ -167,15 +192,21 @@ func GetAttendance(studentID string, c *gin.Context) (models.AttendanceResponse,
 
 // GetStudents retrieves students in a specific class with optional hiding of already marked attendance.
 func GetStudents(classID string, hideMarked bool, c *gin.Context) ([]models.UserClassList, error) {
-	ctx := c.Request.Context()
-	services := config.GetServices(c)
 
-	iter := services.Firebase.DB.Collection("students").
-		Where("student_class", "==", classID).
-		Documents(ctx)
+	ctx := c.Request.Context()
+	svcs := config.GetServices(c)
+
+	query := svcs.Firebase.DB.Collection("students").
+		Where("student_class", "==", classID)
+
+	if hideMarked {
+		today := time.Now().Format("2006-01-02")
+		query = query.Where("last_attendance_date", "!=", today)
+	}
+
+	iter := query.Documents(ctx)
 
 	students := []models.UserClassList{}
-	today := time.Now().Format("2006-01-02")
 
 	for {
 		doc, err := iter.Next()
@@ -190,81 +221,90 @@ func GetStudents(classID string, hideMarked bool, c *gin.Context) ([]models.User
 		if err := doc.DataTo(&s); err != nil {
 			return nil, err
 		}
+
 		s.StudentID = doc.Ref.ID
-
-		if !hideMarked {
-			students = append(students, s)
-			continue
-		}
-
-		attendanceDoc := services.Firebase.DB.
-			Collection("students").
-			Doc(s.StudentID).
-			Collection("attendance").
-			Doc(today)
-
-		_, err = attendanceDoc.Get(ctx)
-		// Already marked today, skip
-		if err == nil {
-			continue
-		}
-
-		if status.Code(err) == codes.NotFound {
-			// Not marked yet, include
-			students = append(students, s)
-			continue
-		}
-
-		return nil, err
-
+		students = append(students, s)
 	}
 
 	return students, nil
 }
 
 // MarkAttendanceBatch marks attendance for multiple students in a batch.
-func MarkAttendanceBatch(records []struct {
-	StudentID string `json:"studentId"`
-	Attended  bool   `json:"attended"`
-}, c *gin.Context) error {
-	services := config.GetServices(c)
+func MarkAttendanceBatch(records []models.AttendanceBatchRecord, c *gin.Context) error {
 
 	ctx := c.Request.Context()
-	batch := services.Firebase.DB.Batch()
-	today := time.Now().Format("2006-01-02")
+	svcs := config.GetServices(c)
 
-	for _, r := range records {
+	return svcs.Firebase.DB.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 
-		if r.StudentID == "" {
-			continue
+		today := time.Now().Format("2006-01-02")
+
+		type studentState struct {
+			ref           *firestore.DocumentRef
+			attendanceRef *firestore.DocumentRef
+			alreadyMarked bool
+			attended      bool
 		}
 
-		attendanceRef := services.Firebase.DB.
-			Collection("students").
-			Doc(r.StudentID).
-			Collection("attendance").
-			Doc(today)
+		states := make([]studentState, 0, len(records))
 
-		batch.Set(attendanceRef, map[string]interface{}{
-			"attended":  r.Attended,
-			"timestamp": firestore.ServerTimestamp,
-		}, firestore.MergeAll)
-	}
+		for _, r := range records {
 
-	_, err := batch.Commit(ctx)
-	return err
+			if r.StudentID == "" {
+				continue
+			}
+
+			studentRef := svcs.Firebase.DB.Collection("students").Doc(r.StudentID)
+			attendanceRef := studentRef.Collection("attendance").Doc(today)
+
+			_, err := tx.Get(attendanceRef)
+
+			alreadyMarked := err == nil
+
+			states = append(states, studentState{
+				ref:           studentRef,
+				attendanceRef: attendanceRef,
+				alreadyMarked: alreadyMarked,
+				attended:      r.Attended,
+			})
+		}
+
+		for _, s := range states {
+
+			tx.Set(s.attendanceRef, map[string]interface{}{
+				"attended":  s.attended,
+				"timestamp": firestore.ServerTimestamp,
+			}, firestore.MergeAll)
+
+			if !s.alreadyMarked {
+
+				update := map[string]interface{}{
+					"total_days":           firestore.Increment(1),
+					"last_attendance_date": today,
+				}
+
+				if s.attended {
+					update["attended_days"] = firestore.Increment(1)
+				} else {
+					update["absent_days"] = firestore.Increment(1)
+				}
+
+				tx.Set(s.ref, update, firestore.MergeAll)
+			}
+		}
+
+		return nil
+	})
 }
-
 func GetClassAttendanceSummary(classID string, c *gin.Context) ([]models.StudentAttendanceSummary, error) {
 	ctx := c.Request.Context()
-	services := config.GetServices(c)
+	svcs := config.GetServices(c)
 
-	// Get all students in class
-	iter := services.Firebase.DB.Collection("students").
+	iter := svcs.Firebase.DB.Collection("students").
 		Where("student_class", "==", classID).
 		Documents(ctx)
 
-	result := []models.StudentAttendanceSummary{}
+	var result []models.StudentAttendanceSummary
 
 	for {
 		doc, err := iter.Next()
@@ -280,54 +320,20 @@ func GetClassAttendanceSummary(classID string, c *gin.Context) ([]models.Student
 			return nil, err
 		}
 
-		studentID := doc.Ref.ID
-
-		// Get attendance records
-		attIter := services.Firebase.DB.
-			Collection("students").
-			Doc(studentID).
-			Collection("attendance").
-			Documents(ctx)
-
-		total := 0
-		attendedCount := 0
-
-		for {
-			attDoc, err := attIter.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-
-			var rec models.AttendanceRecord
-			if err := attDoc.DataTo(&rec); err != nil {
-				return nil, err
-			}
-
-			total++
-			if rec.Attended {
-				attendedCount++
-			}
-		}
-
-		absent := total - attendedCount
-
-		var percentage float64
-		if total > 0 {
-			percentage = float64(attendedCount) / float64(total) * 100
+		percentage := 0.0
+		if student.TotalDays > 0 {
+			percentage = float64(student.AttendedDays) / float64(student.TotalDays) * 100
 		}
 
 		result = append(result, models.StudentAttendanceSummary{
-			StudentID:  studentID,
+			StudentID:  doc.Ref.ID,
 			Name:       student.StudentName,
 			Class:      student.StudentClass,
 			Grade:      student.StudentGrade,
 			Phone:      student.StudentPhone,
-			TotalDays:  total,
-			Attended:   attendedCount,
-			Absent:     absent,
+			TotalDays:  student.TotalDays,
+			Attended:   student.AttendedDays,
+			Absent:     student.AbsentDays,
 			Percentage: percentage,
 		})
 	}

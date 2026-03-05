@@ -52,6 +52,7 @@ import (
 	"HOSEROF_API/models"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -429,6 +430,7 @@ func GetReleasedResult(examID, studentID string, c *gin.Context) (*models.Result
 	}
 	var exam models.Exam
 	if err := examSnap.DataTo(&exam); err != nil {
+		log.Print(err)
 		return nil, err
 	}
 
@@ -439,6 +441,7 @@ func GetReleasedResult(examID, studentID string, c *gin.Context) (*models.Result
 	subDoc := examDoc.Collection("submissions").Doc(studentID)
 	subSnap, err := subDoc.Get(ctx)
 	if err != nil {
+		log.Print(err)
 		return nil, fmt.Errorf("submission not found: %w", err)
 	}
 	var sub models.Submission

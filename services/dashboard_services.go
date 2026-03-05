@@ -12,13 +12,15 @@ import (
 )
 
 func GetTeacherDashboard(c *gin.Context) (models.TeacherDashboardResponse, error) {
+
 	ctx := c.Request.Context()
 	services := config.GetServices(c)
 
 	claims := c.MustGet("claims").(*middleware.Claims)
 	classID := claims.UserClass
 
-	iter := services.Firebase.DB.Collection("students").
+	studentsIter := services.Firebase.DB.
+		Collection("students").
 		Where("student_class", "==", classID).
 		Documents(ctx)
 
@@ -30,7 +32,7 @@ func GetTeacherDashboard(c *gin.Context) (models.TeacherDashboardResponse, error
 	var students []studentInfo
 
 	for {
-		doc, err := iter.Next()
+		doc, err := studentsIter.Next()
 		if err == iterator.Done {
 			break
 		}
@@ -51,63 +53,76 @@ func GetTeacherDashboard(c *gin.Context) (models.TeacherDashboardResponse, error
 
 	totalStudents := len(students)
 
-	sessionMap := make(map[string][]bool)
+	// Create lookup map
+	studentMap := make(map[string]string)
+	for _, s := range students {
+		studentMap[s.ID] = s.Name
+	}
 
+	iter := services.Firebase.DB.
+		CollectionGroup("attendance").
+		Documents(ctx)
+
+	sessionMap := make(map[string][]bool)
 	absenceCount := make(map[string]int)
 	totalDays := make(map[string]int)
 
-	for _, student := range students {
+	for {
 
-		attIter := services.Firebase.DB.
-			Collection("students").
-			Doc(student.ID).
-			Collection("attendance").
-			Documents(ctx)
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
 
-		for {
-			attDoc, err := attIter.Next()
-			if err == iterator.Done {
-				break
-			}
-			if err != nil {
-				return models.TeacherDashboardResponse{}, err
-			}
+		if err != nil {
+			return models.TeacherDashboardResponse{}, err
+		}
 
-			var rec models.AttendanceRecord
-			if err := attDoc.DataTo(&rec); err != nil {
-				return models.TeacherDashboardResponse{}, err
-			}
+		studentID := doc.Ref.Parent.Parent.ID
 
-			date := attDoc.Ref.ID
+		// Skip students not in this class
+		if _, ok := studentMap[studentID]; !ok {
+			continue
+		}
 
-			sessionMap[date] = append(sessionMap[date], rec.Attended)
+		var rec models.AttendanceRecord
+		if err := doc.DataTo(&rec); err != nil {
+			return models.TeacherDashboardResponse{}, err
+		}
 
-			totalDays[student.ID]++
-			if !rec.Attended {
-				absenceCount[student.ID]++
-			}
+		date := doc.Ref.ID
+
+		sessionMap[date] = append(sessionMap[date], rec.Attended)
+
+		totalDays[studentID]++
+
+		if !rec.Attended {
+			absenceCount[studentID]++
 		}
 	}
 
-	// Sort session dates descending
 	var dates []string
 	for date := range sessionMap {
 		dates = append(dates, date)
 	}
+
 	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
 
-	// LAST SESSION
 	var lastSession models.LastSessionStats
+
 	if len(dates) > 0 {
+
 		lastDate := dates[0]
 		records := sessionMap[lastDate]
 
 		attended := 0
+
 		for _, a := range records {
 			if a {
 				attended++
 			}
 		}
+
 		absent := len(records) - attended
 
 		percentage := 0.0
@@ -129,10 +144,12 @@ func GetTeacherDashboard(c *gin.Context) (models.TeacherDashboardResponse, error
 	var last4 []models.SessionChartItem
 
 	for i := 0; i < len(dates) && i < 4; i++ {
+
 		date := dates[i]
 		records := sessionMap[date]
 
 		attended := 0
+
 		for _, a := range records {
 			if a {
 				attended++
@@ -148,16 +165,19 @@ func GetTeacherDashboard(c *gin.Context) (models.TeacherDashboardResponse, error
 
 	var lowStudents []models.LowAttendanceStudent
 
-	for _, student := range students {
-		td := totalDays[student.ID]
+	for _, s := range students {
+
+		td := totalDays[s.ID]
+
 		if td == 0 {
 			continue
 		}
-		percentage := float64(td-absenceCount[student.ID]) / float64(td) * 100
+
+		percentage := float64(td-absenceCount[s.ID]) / float64(td) * 100
 
 		lowStudents = append(lowStudents, models.LowAttendanceStudent{
-			ID:                   student.ID,
-			Name:                 student.Name,
+			ID:                   s.ID,
+			Name:                 s.Name,
 			AttendancePercentage: percentage,
 		})
 	}
@@ -179,32 +199,20 @@ func GetTeacherDashboard(c *gin.Context) (models.TeacherDashboardResponse, error
 }
 
 func GetAdminDashboard(c *gin.Context) (models.AdminDashboardResponse, error) {
+
 	ctx := c.Request.Context()
-	services := config.GetServices(c)
+	svcs := config.GetServices(c)
 
 	var resp models.AdminDashboardResponse
 
-	studentsIter := services.Firebase.DB.Collection("students").Documents(ctx)
+	iter := svcs.Firebase.DB.Collection("students").Documents(ctx)
+
 	totalStudents := 0
-
-	for {
-		_, err := studentsIter.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return resp, err
-		}
-		totalStudents++
-	}
-
-	today := time.Now().Format("2006-01-02")
 	todayAttendance := 0
-
-	studentsIter = services.Firebase.DB.Collection("students").Documents(ctx)
+	today := time.Now().Format("2006-01-02")
 
 	for {
-		doc, err := studentsIter.Next()
+		doc, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
@@ -212,26 +220,17 @@ func GetAdminDashboard(c *gin.Context) (models.AdminDashboardResponse, error) {
 			return resp, err
 		}
 
-		attendanceDoc := services.Firebase.DB.
-			Collection("students").
-			Doc(doc.Ref.ID).
-			Collection("attendance").
-			Doc(today)
+		totalStudents++
 
-		snap, err := attendanceDoc.Get(ctx)
-		if err != nil {
-			continue
-		}
-
-		var record struct {
-			Attended bool `firestore:"attended"`
-		}
-		if err := snap.DataTo(&record); err == nil && record.Attended {
-			todayAttendance++
+		var s models.UserFirestore
+		if err := doc.DataTo(&s); err == nil {
+			if s.LastAttendanceDate == today {
+				todayAttendance++
+			}
 		}
 	}
 
-	examIter := services.Firebase.DB.
+	examIter := svcs.Firebase.DB.
 		Collection("exams").
 		Where("status", "==", "pending").
 		Documents(ctx)
@@ -248,7 +247,7 @@ func GetAdminDashboard(c *gin.Context) (models.AdminDashboardResponse, error) {
 		pendingExams++
 	}
 
-	resultIter := services.Firebase.DB.
+	resultIter := svcs.Firebase.DB.
 		Collection("results").
 		Where("status", "==", "pending").
 		Documents(ctx)

@@ -58,13 +58,16 @@ func CreateStudent(newUser models.NewUser, c *gin.Context) error {
 	services := config.GetServices(c)
 
 	data := map[string]interface{}{
-		"student_id":          newUser.NewStudentID,
-		"student_name":        newUser.NewStudentName,
-		"student_phonenumber": newUser.NewStudentPhoneNumber,
-		"student_age":         newUser.NewStudentAge,
-		"student_grade":       newUser.NewStudentGrade,
-		"student_class":       newUser.NewStudentClass,
-		"role":                newUser.NewStudentRole,
+		"student_id":           newUser.NewStudentID,
+		"student_name":         newUser.NewStudentName,
+		"student_phonenumber":  newUser.NewStudentPhoneNumber,
+		"student_age":          newUser.NewStudentAge,
+		"student_grade":        newUser.NewStudentGrade,
+		"student_class":        newUser.NewStudentClass,
+		"role":                 newUser.NewStudentRole,
+		"attended_days":        0,
+		"last_attendance_date": "",
+		"total_days":           0,
 	}
 
 	_, err := services.Firebase.DB.Collection("students").

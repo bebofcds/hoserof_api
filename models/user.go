@@ -16,13 +16,17 @@ type NewUser struct {
 }
 
 type UserFirestore struct {
-	StudentID    string `firestore:"student_id"`
-	StudentName  string `firestore:"student_name"`
-	StudentClass string `firestore:"student_class"`
-	StudentPhone string `firestore:"student_phonenumber"`
-	StudentAge   string `firestore:"student_age"`
-	StudentGrade string `firestore:"student_grade"`
-	Role         string `firestore:"role"`
+	StudentID          string `firestore:"student_id"`
+	StudentName        string `firestore:"student_name"`
+	StudentClass       string `firestore:"student_class"`
+	StudentPhone       string `firestore:"student_phonenumber"`
+	StudentAge         string `firestore:"student_age"`
+	StudentGrade       string `firestore:"student_grade"`
+	Role               string `firestore:"role"`
+	TotalDays          int    `firestore:"total_days"`
+	AttendedDays       int    `firestore:"attended_days"`
+	AbsentDays         int    `firestore:"absent_days"`
+	LastAttendanceDate string `firestore:"last_attendance_date"`
 }
 
 type UserClassList struct {

@@ -184,7 +184,7 @@ func GetReleasedResultForStudent(c *gin.Context) {
 	claims := c.MustGet("claims").(*middleware.Claims)
 	studentID := claims.ID
 
-	examID := c.Param("examID")
+	examID := c.Param("exam_id")
 
 	result, err := services.GetReleasedResult(examID, studentID, c)
 	if err != nil {

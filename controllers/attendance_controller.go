@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"HOSEROF_API/middleware"
+	"HOSEROF_API/models"
 	"HOSEROF_API/services"
 	"net/http"
 
@@ -148,10 +149,7 @@ func GetStudentsForTeacher(c *gin.Context) {
 }
 
 func MarkAttendanceBatch(c *gin.Context) {
-	var body []struct {
-		StudentID string `json:"studentId"`
-		Attended  bool   `json:"attended"`
-	}
+	var body []models.AttendanceBatchRecord
 
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body", "code": "INVALID_PAYLOAD"})

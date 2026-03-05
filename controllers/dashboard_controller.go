@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"HOSEROF_API/services"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +11,7 @@ import (
 func GetTeacherDashboard(c *gin.Context) {
 	resp, err := services.GetTeacherDashboard(c)
 	if err != nil {
+		log.Print(err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to load dashboard",
 			"code":  "SERVER_ERROR",

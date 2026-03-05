@@ -15,6 +15,10 @@ type AttendanceResponse struct {
 type MarkAttendanceRequest struct {
 	Attended bool `json:"attended"`
 }
+type AttendanceBatchRecord struct {
+	StudentID string `json:"studentId"`
+	Attended  bool   `json:"attended"`
+}
 
 type StudentAttendanceSummary struct {
 	StudentID  string  `json:"studentId"`
